@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, filedialog, messagebox
 import matplotlib
 
+
 matplotlib.use("TkAgg")
 
 
@@ -36,15 +37,15 @@ class FinancialAdvisorApp:
         title_label.pack(pady=15)
 
     def create_main_content(self):
-        # Main content area
+        # main content area
         main_frame = tk.Frame(self.root, bg="#f0f0f0")
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
 
-        # Left panel (controls)
+        # left panel (controls)
         left_panel = tk.Frame(main_frame, bg="#ecf0f1", width=300)
         left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
-        # Add control widgets
+        #add control widgets
         control_label = tk.Label(left_panel, text="Controls", font=("Arial", 14, "bold"),
                                  bg="#ecf0f1", fg="#2c3e50")
         control_label.pack(pady=10)
@@ -74,6 +75,7 @@ class FinancialAdvisorApp:
         future_label = tk.Label(future_frame, text="Future Days:", bg="#ecf0f1")
         future_label.pack(side=tk.LEFT, pady=5)
 
+        #Initialize future days to 10
         self.future_days = tk.StringVar(value="10")
         future_entry = ttk.Entry(future_frame, textvariable=self.future_days, width=10)
         future_entry.pack(side=tk.RIGHT, pady=5)
@@ -119,7 +121,7 @@ class FinancialAdvisorApp:
         welcome_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
         welcome_label = tk.Label(welcome_frame,
-                                 text="Welcome to Zigory Financials S&P 500 Financial Advisor\n\nLoad a CSV file and run the analysis to get started.",
+                                 text="Welcome to Zigory Financial's S&P 500 Financial Advisor\n\nLoad a CSV file and run the analysis to get started.",
                                  font=("Arial", 14), bg="white", justify=tk.CENTER)
         welcome_label.pack(pady=100)
 
@@ -127,14 +129,14 @@ class FinancialAdvisorApp:
         footer_frame = tk.Frame(self.root, bg="#2c3e50", height=30)
         footer_frame.pack(fill=tk.X, side=tk.BOTTOM)
 
-        footer_label = tk.Label(footer_frame, text="© 2025 SPY Financial Advisor - For Educational Purposes Only",
+        footer_label = tk.Label(footer_frame, text="S&P 500 Financial Advisor - For Educational Purposes Only",
                                 font=("Arial", 8), bg="#2c3e50", fg="white")
         footer_label.pack(pady=5)
 
     def load_data(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
         if file_path:
-            try:
+            try: #data = pd.read_csv('spy.csv', index_col=0, parse_dates = True)
                 self.data = pd.read_csv(file_path)
                 messagebox.showinfo("Success", f"Loaded data with {len(self.data)} records")
 
@@ -268,7 +270,7 @@ class FinancialAdvisorApp:
         self.train_model()
 
     def label_outcome(self, row):
-        """Label trade outcomes"""
+        #Label trade outcomes
         if row['Trade'] == 1:
             return 1 if row['Future_Return'] > 0 else 0
         elif row['Trade'] == -1:
@@ -277,11 +279,11 @@ class FinancialAdvisorApp:
             return np.nan
 
     def train_model(self):
-        """Train a machine learning model on the processed data"""
+        #Train a machine learning model on the processed data
         # Drop rows without outcomes
         model_data = self.processed_data.dropna(subset=['Outcome'])
 
-        # Select features and target
+        # Select features
         features = ['Close', 'SMA', 'Price_SMA_Diff']
         X = model_data[features]
         y = model_data['Outcome'].astype(int)
@@ -290,7 +292,7 @@ class FinancialAdvisorApp:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
 
         # Train the model
-        self.clf = RandomForestClassifier(n_estimators=100, random_state=42)
+        self.clf = RandomForestClassifier(n_estimators=500, random_state=42)
         self.clf.fit(X_train, y_train)
 
         # Make predictions
@@ -302,7 +304,7 @@ class FinancialAdvisorApp:
         self.feature_names = features
 
     def update_price_charts_tab(self):
-        """Update the price charts tab with visualizations"""
+        #Update the price charts tab with visualizations
         # Clear the tab
         for widget in self.price_chart_tab.winfo_children():
             widget.destroy()
@@ -348,6 +350,48 @@ class FinancialAdvisorApp:
         for widget in self.strategy_tab.winfo_children():
             widget.destroy()
 
+        canvas = tk.Canvas(self.strategy_tab)
+        scrollbar = tk.Scrollbar(self.strategy_tab, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Create frames within the scrollable frame
+        returns_frame = tk.Frame(scrollable_frame)
+        returns_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+
+        portfolio_frame = tk.Frame(scrollable_frame)
+        portfolio_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 5))
+
+        drawdown_frame = tk.Frame(scrollable_frame)
+        drawdown_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+
+        # Smaller figure sizes
+        fig1, ax1 = plt.subplots(figsize=(10, 3))
+
+
+        ''''# Create frames with fixed heights
+        returns_frame = tk.Frame(self.strategy_tab, height=250)
+        returns_frame.pack(fill=tk.BOTH, padx=10, pady=(10, 5))
+        returns_frame.pack_propagate(False)  # Prevents the frame from shrinking to fit contents
+
+        portfolio_frame = tk.Frame(self.strategy_tab, height=250)
+        portfolio_frame.pack(fill=tk.BOTH, padx=10, pady=(5, 5))
+        portfolio_frame.pack_propagate(False)
+
+        drawdown_frame = tk.Frame(self.strategy_tab, height=250)
+        drawdown_frame.pack(fill=tk.BOTH, padx=10, pady=(5, 10))
+        drawdown_frame.pack_propagate(False) '''
+        '''
         # Create frames for charts
         returns_frame = tk.Frame(self.strategy_tab)
         returns_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
@@ -356,7 +400,7 @@ class FinancialAdvisorApp:
         portfolio_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 5))
 
         drawdown_frame = tk.Frame(self.strategy_tab)
-        drawdown_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+        drawdown_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))'''
 
         # Create returns comparison chart
         fig1, ax1 = plt.subplots(figsize=(10, 4))
@@ -421,6 +465,24 @@ class FinancialAdvisorApp:
         metrics_text = scrolledtext.ScrolledText(metrics_frame, width=80, height=15)
         metrics_text.pack(fill=tk.X)
 
+        explanation_text = (
+            "Explanation:\n\n"
+            "The confusion matrix shows the counts of correct and incorrect predictions for each class.\n"
+            "Confusion Matrix layout:\n"
+            " [True Positives for Sell Signals] [False Positives for Sell Signals]\n"
+            " [False Negatives for Buy Signals] [True Negatives for Buy Signals]\n"
+            "The classification report provides precision, recall, and F1-score. For example, high precision "
+            "means that when the model predicts a class, it is usually correct; high recall indicates that the "
+            "model correctly identifies most of the actual instances of that class; and the F1-score balances both metrics. "
+            "These metrics help assess where the model might be improved, such as adjusting thresholds or addressing class imbalance."
+        )
+        explanation_label = tk.Label(metrics_frame, text=explanation_text,
+                                     font=("Arial", 11), wraplength=500, justify=tk.LEFT)
+        explanation_label.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10)
+
+
+
+
         # Calculate and display confusion matrix and classification report
         cm = confusion_matrix(self.y_test, self.y_pred)
         cr = classification_report(self.y_test, self.y_pred)
@@ -455,17 +517,17 @@ class FinancialAdvisorApp:
 
         # Create header frame
         header_frame = tk.Frame(self.recommendation_tab, bg="white")
-        header_frame.pack(fill=tk.X, padx=20, pady=10)
+        header_frame.pack(fill=tk.X, padx=10, pady=10)
 
         # Latest recommendation
         latest_rec = latest_data.iloc[-1]['Recommendation']
-        rec_color = "#27ae60" if latest_rec == "Buy/Hold" else "#e74c3c"
+        rec_color = "green" if latest_rec == "Buy/Hold" else "red"
 
         rec_label = tk.Label(header_frame, text="CURRENT RECOMMENDATION:", font=("Arial", 16, "bold"), bg="white")
-        rec_label.pack(pady=(10, 5))
+        rec_label.pack(pady=(5, 5))
 
         big_rec_label = tk.Label(header_frame, text=latest_rec, font=("Arial", 24, "bold"), fg="white", bg=rec_color)
-        big_rec_label.pack(pady=10, ipadx=20, ipady=10)
+        big_rec_label.pack(pady=5, ipadx=10, ipady=5)
 
         # Latest prices and indicators
         latest_price = latest_data.iloc[-1]['Close']
@@ -482,16 +544,18 @@ class FinancialAdvisorApp:
         sma_label.pack(side=tk.RIGHT, padx=20)
 
         # Recent trend section
-        trend_frame = tk.Frame(self.recommendation_tab, bg="#f8f9fa")
-        trend_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        trend_frame = tk.Frame(self.recommendation_tab, bg="#f8f9fa", height = 400)
+        trend_frame.pack(fill=tk.X, padx=20, pady=10)
+        trend_frame.pack_propagate(False)
+
 
         trend_label = tk.Label(trend_frame, text="Recent Price Trend", font=("Arial", 14, "bold"), bg="#f8f9fa")
         trend_label.pack(anchor=tk.W, pady=10)
 
-        # Plot recent price trend
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # Plot recent price trend (dimensions are width, height in inches)
+        fig, ax = plt.subplots(figsize=(8, 5))
 
-        # Get the last 700 data points for the chart
+        # Get the last 800 data points for the chart
         recent_data = self.processed_data.iloc[-800:]
 
         ax.plot(recent_data.index, recent_data['Close'], label='Close Price', linewidth=2)
@@ -528,7 +592,6 @@ class FinancialAdvisorApp:
 
         summary_text = f"""
 Strategy Summary:
-
 SMA Strategy Total Return: {strategy_return:.2f}%
 Buy & Hold Total Return: {buy_hold_return:.2f}%
 

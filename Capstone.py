@@ -23,18 +23,25 @@ print(leveraged_data)
 data['SMA200'] = data['Close'].rolling(window=200).mean()
 print(data)
 
+#Since the 200-day SMA is subject to a lot of false positives in sideways markets, change the signal to only activate when
+#above or below 200-day SMA for over a week
+data['Above_200_SMA'] = data['Close'] > data['SMA200']
+data['Above_200_SMA_7D'] = data['Above_200_SMA'].rolling(window=7).sum() == 7  # True if all 7 days were above
+data['Below_200_SMA_7D'] = data['Above_200_SMA'].rolling(window=7).sum() == 0   # True if all 7 days were below
+
+
 # Plot the data using matplotlib to visualize how the price has moved over time
 features = ['Open','High','Low','Close','Volume', 'SMA200']
 data[features].plot(subplots=True,figsize=(12,10),title='S&P500 SPY',linestyle='-',linewidth=2)
 plt.show()
 
-# 3. Generate signals based on crossovers
-#    First, create a signal column: 1 if price > SMA200, -1 if price < SMA200.
+# Generate signals based on crossovers
+# create a signal column: 1 if price > SMA200, -1 if price < SMA200.
 #Initialize signal to 1 since the 200D SMA does not exist in the first 200 days of data
 data['Signal'] = 1
 data = data
-data.loc[data['Close'] > data['SMA200'], 'Signal'] = 1
-data.loc[data['Close'] < data['SMA200'], 'Signal'] = -1
+data.loc[(data['Close'] > data['SMA200']) & (data['Above_200_SMA_7D']), 'Signal'] = 1
+data.loc[(data['Close'] < data['SMA200']) & (data['Below_200_SMA_7D']), 'Signal'] = -1
 
 #To capture only the crossovers compare today's signal to yesterday's
 data['Prev_Signal'] = data['Signal'].shift(1)
@@ -46,7 +53,7 @@ data.loc[(data['Signal'] == -1) & (data['Prev_Signal'] == 1), 'Trade'] = -1  # S
 
 # 4. Define outcomes for each trade.
 #    For example, measure the return over the next N days (e.g., 10 days).
-N = 10
+N = 100
 data['Future_Return'] = data['Close'].shift(-N) / data['Close'] - 1
 
 #    Label the trade outcome:
@@ -64,7 +71,7 @@ data['Outcome'] = data.apply(label_outcome, axis=1)
 # Remove rows without a trade signal or outcome
 data.dropna(subset=['Outcome'], inplace=True)
 
-# 5. Feature Engineering
+# Machine Learning Portion -------------------------------------------------------------
 #    Create a feature like the difference between the current price and the SMA.
 data['Price_SMA_Diff'] = data['Close'] - data['SMA200']
 #    You can add more features as needed.
@@ -73,12 +80,13 @@ features = ['Close', 'SMA200', 'Price_SMA_Diff']
 X = data[features]
 y = data['Outcome'].astype(int)
 
-# 6. Split the data into training and test sets
-#    (Here we do a time-series split by not shuffling the data)
+# split the data into training and test sets
+# Here we do a time-series split by not shuffling the data
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
 
-# 7. Train a Random Forest Classifier
-clf = RandomForestClassifier(n_estimators=100, random_state=42)
+# train a Random Forest Classifier
+#n_estimators = number of decision trees, random_state = seed for randomness model
+clf = RandomForestClassifier(n_estimators=500, random_state=42)
 clf.fit(X_train, y_train)
 
 # 8. Make predictions and evaluate the model
@@ -88,7 +96,7 @@ print(confusion_matrix(y_test, y_pred))
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred))
 
-# 9. Plot feature importances
+#Plot feature importances
 importances = clf.feature_importances_
 indices = np.argsort(importances)
 
@@ -207,3 +215,9 @@ fig, ax = plt.subplots()
 ax.plot(x, y)
 plt.show()
 '''
+
+#TODO
+#Fix UI so you don't have to scroll to see draw down chart ------- Done
+
+#Add 2X leveraged charts just for fun
+#Add more to the ML part of the project
