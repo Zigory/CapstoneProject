@@ -5,6 +5,9 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import train_test_split
 
+#I created this file first to get an idea of what I wanted to do, then implemented everything into the UI file.
+
+
 pd.set_option('display.width', 0)
 pd.set_option('display.max_columns', None)
 
@@ -51,61 +54,7 @@ data['Trade'] = 0
 data.loc[(data['Signal'] == 1) & (data['Prev_Signal'] == -1), 'Trade'] = 1  # Buy signal
 data.loc[(data['Signal'] == -1) & (data['Prev_Signal'] == 1), 'Trade'] = -1  # Sell signal
 
-# 4. Define outcomes for each trade.
-#    For example, measure the return over the next N days (e.g., 10 days).
-N = 100
-data['Future_Return'] = data['Close'].shift(-N) / data['Close'] - 1
 
-#    Label the trade outcome:
-#    For a buy, a positive return might be considered a success (1).
-#    For a sell, a negative return might be considered a success (1).
-def label_outcome(row):
-    if row['Trade'] == 1:
-        return 1 if row['Future_Return'] > 0 else 0
-    elif row['Trade'] == -1:
-        return 1 if row['Future_Return'] < 0 else 0
-    else:
-        return np.nan
-
-data['Outcome'] = data.apply(label_outcome, axis=1)
-# Remove rows without a trade signal or outcome
-data.dropna(subset=['Outcome'], inplace=True)
-
-# Machine Learning Portion -------------------------------------------------------------
-#    Create a feature like the difference between the current price and the SMA.
-data['Price_SMA_Diff'] = data['Close'] - data['SMA200']
-#    You can add more features as needed.
-
-features = ['Close', 'SMA200', 'Price_SMA_Diff']
-X = data[features]
-y = data['Outcome'].astype(int)
-
-# split the data into training and test sets
-# Here we do a time-series split by not shuffling the data
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
-
-# train a Random Forest Classifier
-#n_estimators = number of decision trees, random_state = seed for randomness model
-clf = RandomForestClassifier(n_estimators=500, random_state=42)
-clf.fit(X_train, y_train)
-
-# 8. Make predictions and evaluate the model
-y_pred = clf.predict(X_test)
-print("Confusion Matrix:")
-print(confusion_matrix(y_test, y_pred))
-print("\nClassification Report:")
-print(classification_report(y_test, y_pred))
-
-#Plot feature importances
-importances = clf.feature_importances_
-indices = np.argsort(importances)
-
-plt.figure(figsize=(8, 6))
-plt.title('Feature Importances')
-plt.barh(range(len(indices)), importances[indices], color='blue', align='center')
-plt.yticks(range(len(indices)), [features[i] for i in indices])
-plt.xlabel('Relative Importance')
-plt.show()
 
 # Daily spy returns
 data['Daily_Returns'] = data['Close'].pct_change()
@@ -115,7 +64,7 @@ data['Buy_Hold'] = (1 + data['Daily_Returns']).cumprod()
 data['Buy_Hold_Portfolio'] = 10000*data['Buy_Hold']
 
 
-# Find the returns if we follow the 200-D SMA strategy -----------------------------------------
+# find the returns if we follow the 200-D SMA strategy -----------------------------------------
 data['Position'] = data['Signal'].shift(1).fillna(0).apply(lambda x: 1 if x == 1 else 0)
 # When position = 0, daily return is 0
 
@@ -201,9 +150,65 @@ data['Recommendation'] = np.where(data['Close'] > data['SMA200'], 'Buy/Hold', 'S
 
 # Display the latest recommendations
 print(data[['Close', 'SMA200', 'Recommendation']])
+print(data.index.max())
 
 
 
+#Define outcomes for each trade.
+#For example, measure the return over the next N days
+N = 10
+data['Future_Return'] = data['Close'].shift(-N) / data['Close'] - 1
+
+#    Label the trade outcome:
+#    For a buy, a positive return might be considered a success (1).
+#    For a sell, a negative return might be considered a success (1).
+def label_outcome(row):
+    if row['Trade'] == 1:
+        return 1 if row['Future_Return'] > 0 else 0
+    elif row['Trade'] == -1:
+        return 1 if row['Future_Return'] < 0 else 0
+    else:
+        return np.nan
+
+data['Outcome'] = data.apply(label_outcome, axis=1)
+# Remove rows without a trade signal or outcome
+data.dropna(subset=['Outcome'], inplace=True)
+print(data['Outcome'])
+# Machine Learning Portion -------------------------------------------------------------
+#Create a feature like the difference between the current price and the SMA.
+data['Price_SMA_Diff'] = data['Close'] - data['SMA200']
+# maybe add more features?
+
+features = ['Close', 'SMA200', 'Price_SMA_Diff']
+X = data[features]
+y = data['Outcome'].astype(int)
+
+# split the data into training and test sets
+# Here we do a time-series split by not shuffling the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+
+# train a Random Forest Classifier
+#n_estimators = number of decision trees, random_state = seed for randomness model
+clf = RandomForestClassifier(n_estimators=1000, random_state=42)
+clf.fit(X_train, y_train)
+
+#make predictions and evaluate the model
+y_pred = clf.predict(X_test)
+print("Confusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred))
+
+#plot feature importances
+importances = clf.feature_importances_
+indices = np.argsort(importances)
+
+plt.figure(figsize=(8, 6))
+plt.title('Feature Importances')
+plt.barh(range(len(indices)), importances[indices], color='blue', align='center')
+plt.yticks(range(len(indices)), [features[i] for i in indices])
+plt.xlabel('Relative Importance')
+plt.show()
 
 '''
 example of matplotlib
@@ -215,9 +220,3 @@ fig, ax = plt.subplots()
 ax.plot(x, y)
 plt.show()
 '''
-
-#TODO
-#Fix UI so you don't have to scroll to see draw down chart ------- Done
-
-#Add 2X leveraged charts just for fun
-#Add more to the ML part of the project

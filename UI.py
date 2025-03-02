@@ -8,10 +8,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 from tkinter import ttk, scrolledtext, filedialog, messagebox
 import matplotlib
-
-
 matplotlib.use("TkAgg")
-
 
 class FinancialAdvisorApp:
     def __init__(self, root):
@@ -116,7 +113,7 @@ class FinancialAdvisorApp:
         self.notebook.add(self.model_tab, text="ML Model")
         self.notebook.add(self.recommendation_tab, text="Recommendations")
 
-        # Initialize overview tab with welcome message
+        # Initialize overview tab with the welcome message
         welcome_frame = tk.Frame(self.overview_tab, bg="white")
         welcome_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
@@ -138,6 +135,13 @@ class FinancialAdvisorApp:
         if file_path:
             try: #data = pd.read_csv('spy.csv', index_col=0, parse_dates = True)
                 self.data = pd.read_csv(file_path)
+
+                if 'Date' in self.data.columns:
+                    self.data['Date'] = pd.to_datetime(self.data['Date'])
+                    # Set Date as index
+                    self.data.set_index('Date', inplace=True)
+
+
                 messagebox.showinfo("Success", f"Loaded data with {len(self.data)} records")
 
                 # Display data summary in overview tab
@@ -153,18 +157,18 @@ class FinancialAdvisorApp:
         if self.data is None:
             return
 
-        # Create frames for different sections
+        # create frames for different sections
         header_frame = tk.Frame(self.overview_tab, bg="white")
         header_frame.pack(fill=tk.X, padx=20, pady=10)
 
         summary_frame = tk.Frame(self.overview_tab, bg="white")
         summary_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
 
-        # Header with data info
+        #header with data info
         header_label = tk.Label(header_frame, text=f"SPY Data Overview", font=("Arial", 16, "bold"), bg="white")
         header_label.pack(anchor=tk.W, pady=5)
 
-        date_range = f"Date Range: {self.data['Date'].iloc[0]} to {self.data['Date'].iloc[-1]}"
+        date_range = f"Date Range: {self.data.index[0].strftime('%Y-%m-%d')} to {self.data.index[-1].strftime('%Y-%m-%d')}"
         date_label = tk.Label(header_frame, text=date_range, font=("Arial", 12), bg="white")
         date_label.pack(anchor=tk.W, pady=2)
 
@@ -192,10 +196,10 @@ class FinancialAdvisorApp:
             future_days = int(self.future_days.get())
             initial_investment = float(self.initial_investment.get())
 
-            # Run analysis
+            # run analysis
             self.analyze_data(sma_period, future_days, initial_investment)
 
-            # Update all tabs with new results
+            # update all tabs with new results
             self.update_price_charts_tab()
             self.update_strategy_tab()
             self.update_model_tab()
@@ -208,19 +212,26 @@ class FinancialAdvisorApp:
             messagebox.showerror("Error", f"Analysis failed: {str(e)}")
 
     def analyze_data(self, sma_period, future_days, initial_investment):
-        # Run the financial analysis on the loaded data
-        # Make a copy of the data to avoid modifying the original
+        # run the analysis on the loaded data
+        # make a copy of the data to avoid modifying the original
         self.processed_data = self.data.copy()
 
-        # Calculate the SMA
+        # Calculate the 200D SMA
         self.processed_data['SMA'] = self.processed_data['Close'].rolling(window=sma_period).mean()
+        self.processed_data['Above_SMA'] = self.processed_data['Close'] > self.processed_data['SMA']
+        self.processed_data['Above_SMA_7D'] = self.processed_data['Above_SMA'].rolling(
+            window=7).sum() == 7  # True if all 7 days above
+        self.processed_data['Below_SMA_7D'] = self.processed_data['Above_SMA'].rolling(
+            window=7).sum() == 0  # True if all 7 days below
 
-        # Generate signals
+        # generate  trade signals
         self.processed_data['Signal'] = 1
-        self.processed_data.loc[self.processed_data['Close'] > self.processed_data['SMA'], 'Signal'] = 1
-        self.processed_data.loc[self.processed_data['Close'] < self.processed_data['SMA'], 'Signal'] = -1
+        self.processed_data.loc[(self.processed_data['Close'] > self.processed_data['SMA']) &
+                                (self.processed_data['Above_SMA_7D']), 'Signal'] = 1
+        self.processed_data.loc[(self.processed_data['Close'] < self.processed_data['SMA']) &
+                                (self.processed_data['Below_SMA_7D']), 'Signal'] = -1
 
-        # Create trade signals for crossovers
+        # create trade signals for crossover events only
         self.processed_data['Prev_Signal'] = self.processed_data['Signal'].shift(1)
         self.processed_data['Trade'] = 0
         self.processed_data.loc[(self.processed_data['Signal'] == 1) &
@@ -228,20 +239,20 @@ class FinancialAdvisorApp:
         self.processed_data.loc[(self.processed_data['Signal'] == -1) &
                                 (self.processed_data['Prev_Signal'] == 1), 'Trade'] = -1  # Sell signal
 
-        # Calculate future returns
+        # calculate future returns
         self.processed_data['Future_Return'] = self.processed_data['Close'].shift(-future_days) / self.processed_data[
             'Close'] - 1
 
-        # Label outcomes
+        # label outcomes
         self.processed_data['Outcome'] = self.processed_data.apply(self.label_outcome, axis=1)
 
-        # Feature engineering
+        # Features
         self.processed_data['Price_SMA_Diff'] = self.processed_data['Close'] - self.processed_data['SMA']
 
-        # Daily returns
+        # daily returns
         self.processed_data['Daily_Returns'] = self.processed_data['Close'].pct_change()
 
-        # Buy and hold strategy
+        # buy and hold strategy
         self.processed_data['Buy_Hold'] = (1 + self.processed_data['Daily_Returns']).cumprod()
         self.processed_data['Buy_Hold_Portfolio'] = initial_investment * self.processed_data['Buy_Hold']
 
@@ -253,6 +264,16 @@ class FinancialAdvisorApp:
         self.processed_data['Strategy_Portfolio'] = initial_investment * self.processed_data[
             'Strategy_Cumulative_Return']
 
+        self.processed_data['2X_Returns'] = self.processed_data['Daily_Returns'] * 2
+        self.processed_data['2X_Buy_Hold'] = (1 + self.processed_data['2X_Returns']).cumprod()
+        self.processed_data['2X_Buy_Hold_Portfolio'] = initial_investment * self.processed_data['2X_Buy_Hold']
+
+        # Leveraged ETF with SMA strategy
+        self.processed_data['2X_Strategy_Return'] = self.processed_data['2X_Returns'] * self.processed_data['Position']
+        self.processed_data['2X_Strategy_Cumulative_Return'] = (1 + self.processed_data['2X_Strategy_Return']).cumprod()
+        self.processed_data['2X_Strategy_Portfolio'] = initial_investment * self.processed_data[
+            '2X_Strategy_Cumulative_Return']
+
         # Calculate drawdowns
         self.processed_data['Buy_Hold_Running_Max'] = self.processed_data['Buy_Hold'].cummax()
         self.processed_data['Buy_Hold_Drawdown'] = self.processed_data['Buy_Hold'] / self.processed_data[
@@ -262,11 +283,22 @@ class FinancialAdvisorApp:
         self.processed_data['Strategy_Drawdown'] = self.processed_data['Strategy_Cumulative_Return'] / \
                                                    self.processed_data['Strategy_Running_Max'] - 1
 
+        self.processed_data['2X_Buy_Hold_Running_Max'] = self.processed_data['2X_Buy_Hold'].cummax()
+        self.processed_data['2X_Buy_Hold_Drawdown'] = self.processed_data['2X_Buy_Hold'] / self.processed_data[
+            '2X_Buy_Hold_Running_Max'] - 1
+
+        self.processed_data['2X_Strategy_Running_Max'] = self.processed_data['2X_Strategy_Cumulative_Return'].cummax()
+        self.processed_data['2X_Strategy_Drawdown'] = self.processed_data['2X_Strategy_Cumulative_Return'] / \
+                                                      self.processed_data['2X_Strategy_Running_Max'] - 1
+
+
         # Generate recommendations
         self.processed_data['Recommendation'] = np.where(self.processed_data['Close'] > self.processed_data['SMA'],
                                                          'Buy/Hold', 'Sell')
 
-        # Train ML model if we have enough data
+        self.leveraged_data = self.processed_data[self.processed_data.index >= '2006-01-01'].copy()
+
+        # train ML model
         self.train_model()
 
     def label_outcome(self, row):
@@ -378,35 +410,15 @@ class FinancialAdvisorApp:
         # Smaller figure sizes
         fig1, ax1 = plt.subplots(figsize=(10, 3))
 
-
-        ''''# Create frames with fixed heights
-        returns_frame = tk.Frame(self.strategy_tab, height=250)
-        returns_frame.pack(fill=tk.BOTH, padx=10, pady=(10, 5))
-        returns_frame.pack_propagate(False)  # Prevents the frame from shrinking to fit contents
-
-        portfolio_frame = tk.Frame(self.strategy_tab, height=250)
-        portfolio_frame.pack(fill=tk.BOTH, padx=10, pady=(5, 5))
-        portfolio_frame.pack_propagate(False)
-
-        drawdown_frame = tk.Frame(self.strategy_tab, height=250)
-        drawdown_frame.pack(fill=tk.BOTH, padx=10, pady=(5, 10))
-        drawdown_frame.pack_propagate(False) '''
-        '''
-        # Create frames for charts
-        returns_frame = tk.Frame(self.strategy_tab)
-        returns_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
-
-        portfolio_frame = tk.Frame(self.strategy_tab)
-        portfolio_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 5))
-
-        drawdown_frame = tk.Frame(self.strategy_tab)
-        drawdown_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))'''
-
         # Create returns comparison chart
         fig1, ax1 = plt.subplots(figsize=(10, 4))
         ax1.plot(self.processed_data.index, self.processed_data['Buy_Hold'], label='Buy & Hold')
         ax1.plot(self.processed_data.index, self.processed_data['Strategy_Cumulative_Return'],
                  label=f'{self.sma_period.get()}-Day SMA Strategy')
+        ax1.plot(self.processed_data.index, self.processed_data['2X_Buy_Hold'],
+                 label='2X Leveraged Buy & Hold')
+        ax1.plot(self.processed_data.index, self.processed_data['2X_Strategy_Cumulative_Return'],
+                 label=f'2X Leveraged {self.sma_period.get()}-Day SMA Strategy')
         ax1.set_title('Cumulative Returns Comparison')
         ax1.set_xlabel('Date')
         ax1.set_ylabel('Cumulative Returns')
@@ -421,6 +433,10 @@ class FinancialAdvisorApp:
         ax2.plot(self.processed_data.index, self.processed_data['Buy_Hold_Portfolio'], label='Buy & Hold Portfolio')
         ax2.plot(self.processed_data.index, self.processed_data['Strategy_Portfolio'],
                  label=f'{self.sma_period.get()}-Day SMA Strategy Portfolio')
+        ax2.plot(self.processed_data.index, self.processed_data['2X_Buy_Hold_Portfolio'],
+                 label='2X Leveraged Buy & Hold Portfolio')
+        ax2.plot(self.processed_data.index, self.processed_data['2X_Strategy_Portfolio'],
+                 label=f'2X Leveraged {self.sma_period.get()}-Day SMA Strategy Portfolio')
         ax2.set_title(f'Portfolio Value (${self.initial_investment.get()} Initial Investment)')
         ax2.set_xlabel('Date')
         ax2.set_ylabel('Portfolio Value ($)')
@@ -446,7 +462,7 @@ class FinancialAdvisorApp:
         canvas3.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     def update_model_tab(self):
-        """Update the ML model tab with results"""
+        #Update the ML model tab with results
         # Clear the tab
         for widget in self.model_tab.winfo_children():
             widget.destroy()
@@ -479,8 +495,6 @@ class FinancialAdvisorApp:
         explanation_label = tk.Label(metrics_frame, text=explanation_text,
                                      font=("Arial", 11), wraplength=500, justify=tk.LEFT)
         explanation_label.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10)
-
-
 
 
         # Calculate and display confusion matrix and classification report
@@ -579,35 +593,42 @@ class FinancialAdvisorApp:
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # Summary section
+        # summary section
         summary_frame = tk.Frame(self.recommendation_tab, bg="white")
         summary_frame.pack(fill=tk.X, padx=20, pady=10)
 
-        # Add strategy performance metrics
+        # add strategy performance metrics
         strategy_return = self.processed_data['Strategy_Cumulative_Return'].iloc[-1] * 100 - 100
         buy_hold_return = self.processed_data['Buy_Hold'].iloc[-1] * 100 - 100
 
         max_strategy_dd = self.processed_data['Strategy_Drawdown'].min() * 100
         max_buy_hold_dd = self.processed_data['Buy_Hold_Drawdown'].min() * 100
 
+        lev_strategy_return = self.processed_data['2X_Strategy_Cumulative_Return'].iloc[-1] * 100 - 100
+        lev_buy_hold_return = self.processed_data['2X_Buy_Hold'].iloc[-1] * 100 - 100
+
         summary_text = f"""
-Strategy Summary:
-SMA Strategy Total Return: {strategy_return:.2f}%
-Buy & Hold Total Return: {buy_hold_return:.2f}%
+        Strategy Summary:
+        SMA Strategy Total Return: {strategy_return:.2f}%
+        Buy & Hold Total Return: {buy_hold_return:.2f}%
+        2X Leveraged SMA Strategy Total Return: {lev_strategy_return:.2f}%
+        2X Leveraged Buy & Hold Total Return: {lev_buy_hold_return:.2f}%
 
-SMA Strategy Max Drawdown: {max_strategy_dd:.2f}%
-Buy & Hold Max Drawdown: {max_buy_hold_dd:.2f}%
+        SMA Strategy Max Drawdown: {max_strategy_dd:.2f}%
+        Buy & Hold Max Drawdown: {max_buy_hold_dd:.2f}%
 
-Disclaimer: This is for educational purposes only. Past performance is not indicative of future results.
-"""
+        Note: 2X leveraged ETFs may have higher volatility and tracking errors over time.
+        Disclaimer: This is for educational purposes only. Past performance is not indicative of future results.
+        """
+
+
 
         summary_box = scrolledtext.ScrolledText(summary_frame, width=80, height=10, font=("Arial", 11))
         summary_box.pack(fill=tk.X, pady=10)
         summary_box.insert(tk.END, summary_text)
         summary_box.config(state=tk.DISABLED)
 
-
-# Run the application
+# run the app
 if __name__ == "__main__":
     root = tk.Tk()
     app = FinancialAdvisorApp(root)
